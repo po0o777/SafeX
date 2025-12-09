@@ -6,21 +6,16 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.fsm.storage.memory import MemoryStorage
-from openai import OpenAI, APIError
+from openai import OpenAI
 from openai.types.chat import ChatCompletionSystemMessageParam, ChatCompletionUserMessageParam
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 import time
-
-
 from dotenv import load_dotenv
-import os
 
-# Загружаем переменные из .env
+# ----------------- Загружаем переменные -----------------
 load_dotenv()
-
-# ----------------- Ключи ----------------
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if not TELEGRAM_TOKEN or not OPENAI_API_KEY:
@@ -41,38 +36,38 @@ class Form(StatesGroup):
     MANUAL_SELLER = State()
     MANUAL_PHOTO = State()
 
-# ----------------- Тексты на разных языках -----------------
+# ----------------- Тексты -----------------
 LANG_TEXT = {
     "Русский язык": {
-        "greeting": "👋 Привет! Я — SAFEX, ИИ-детектор подделок и подозрительных товаров. Отправь ссылку на товар.",
-        "analyzing": "🔍 Анализирую товар, подожди...",
+        "greeting": "Я — SAFEX, ИИ-детектор подделок. Отправь ссылку на товар.",
+        "analyzing": "🔍 Анализирую товар...",
         "manual_price": "💲 Укажи цену товара:",
         "manual_rating": "⭐ Введи рейтинг и отзывы товара:",
-        "manual_description": "🔍 Введи подозрительные слова из описания (если есть):",
+        "manual_description": "🔍 Введи подозрительные слова из описания:",
         "manual_seller": "🏪 Введи продавца или магазин:",
         "manual_photo": "📸 Прикрепи фото товара (или пропусти):"
     },
     "Қаз яз": {
-        "greeting": "👋 Сәлем! Мен — SAFEX, жалған немесе күдікті тауарларды анықтайтын ИИ. Тауарға сілтеме жіберіңіз.",
-        "analyzing": "🔍 Тауарды талдап жатырмын, күте тұрыңыз...",
-        "manual_price": "💲 Тауардың бағасын көрсетіңіз:",
+        "greeting": "Мен — SAFEX, жалған тауарларды анықтаймын. Сілтеме жіберіңіз.",
+        "analyzing": "🔍 Тауарды талдап жатырмын...",
+        "manual_price": "💲 Бағаны көрсетіңіз:",
         "manual_rating": "⭐ Баға мен пікірлерді енгізіңіз:",
         "manual_description": "🔍 Сипаттамадан күдікті сөздерді енгізіңіз:",
-        "manual_seller": "🏪 Сатушыны немесе дүкенді енгізіңіз:",
-        "manual_photo": "📸 Тауардың суретін тіркеңіз (немесе өткізіп жіберіңіз):"
+        "manual_seller": "🏪 Сатушыны енгізіңіз:",
+        "manual_photo": "📸 Суретті тіркеңіз (немесе өткізіп жіберіңіз):"
     },
     "English": {
-        "greeting": "👋 Hi! I'm SAFEX, an AI detector for counterfeit and suspicious products. Send a product link.",
-        "analyzing": "🔍 Analyzing the product, please wait...",
+        "greeting": "I'm SAFEX, an AI detector for counterfeit products. Send a product link.",
+        "analyzing": "🔍 Analyzing the product...",
         "manual_price": "💲 Enter the product price:",
         "manual_rating": "⭐ Enter the rating and reviews:",
-        "manual_description": "🔍 Enter suspicious words from description (if any):",
+        "manual_description": "🔍 Enter suspicious words from description:",
         "manual_seller": "🏪 Enter the seller or store:",
         "manual_photo": "📸 Attach a product photo (or skip):"
     }
 }
 
-# ----------------- Парсинг через Selenium -----------------
+# ----------------- Selenium парсинг -----------------
 def parse_product_selenium(link: str):
     options = Options()
     options.headless = True
@@ -81,7 +76,7 @@ def parse_product_selenium(link: str):
     driver = webdriver.Chrome(options=options)
     try:
         driver.get(link)
-        time.sleep(3)  # ждём JS
+        time.sleep(3)
         title = driver.title
         try:
             price_elem = driver.find_element(By.CSS_SELECTOR, '[class*=price], [class*=cost]')
@@ -106,7 +101,7 @@ def parse_product_selenium(link: str):
     finally:
         driver.quit()
 
-# ----------------- FSM Start -----------------
+# ----------------- Команды и FSM -----------------
 @dp.message(Command("start"))
 async def start_cmd(message: types.Message, state: FSMContext):
     keyboard = types.ReplyKeyboardMarkup(
@@ -123,12 +118,11 @@ async def language_choice(message: types.Message, state: FSMContext):
     await message.answer(texts["greeting"], reply_markup=types.ReplyKeyboardRemove())
     await state.set_state(Form.LINK)
 
-# ----------------- Обработка ссылки -----------------
 @dp.message(Form.LINK)
 async def get_link(message: types.Message, state: FSMContext):
     link = message.text.strip()
     if not re.match(r"https?://", link):
-        await message.answer("⚠️ Отправь корректную ссылку, начиная с http:// или https://")
+        await message.answer("⚠️ Отправь корректную ссылку")
         return
     await state.update_data(link=link)
     data = parse_product_selenium(link)
@@ -181,13 +175,12 @@ async def analyze_product(message: types.Message, state: FSMContext):
     texts = LANG_TEXT.get(language, LANG_TEXT["Русский язык"])
     await message.answer(texts["analyzing"])
 
-    # ----------------- Локальный расчёт риска -----------------
+    # Локальный анализ риска
     risk = 0
     price = data.get("price", "")
     reviews = data.get("rating_reviews", "")
     suspicious_words = ["копия", "реплика", "не оригинал", "1:1 оригинал", "серый товар"]
 
-    # Цена
     if price and any(char.isdigit() for char in price):
         try:
             price_val = float(re.sub(r"[^\d.]", "", price))
@@ -198,20 +191,16 @@ async def analyze_product(message: types.Message, state: FSMContext):
     else:
         risk += 30
 
-    # Подозрительные слова
     if any(word in reviews.lower() for word in suspicious_words):
         risk += 20
 
-    # Отсутствие продавца
     if not data.get("seller") or data.get("seller") == "Неизвестно":
         risk += 20
 
-    # Мало отзывов
     if reviews and len(reviews.split()) < 10:
         risk += 10
 
     risk = min(risk, 100)
-
     if risk >= 70:
         emoji = "🔴 ВЫСОКИЙ РИСК"
     elif risk >= 40:
@@ -219,7 +208,7 @@ async def analyze_product(message: types.Message, state: FSMContext):
     else:
         emoji = "🟢 НИЗКИЙ РИСК"
 
-    # ----------------- GPT объяснение -----------------
+    # GPT объяснение
     prompt = f"""
 You are SAFEX — an AI system that detects counterfeit products.
 Data:
@@ -263,7 +252,6 @@ Give short reasons and advice in {language}.
     await message.answer("Что дальше?", reply_markup=keyboard)
     await state.clear()
 
-# ----------------- Кнопка проверить другой товар -----------------
 @dp.message(F.text == "🔁 Проверить другой товар")
 async def check_another(message: types.Message, state: FSMContext):
     await start_cmd(message, state)
