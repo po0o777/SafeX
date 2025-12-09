@@ -14,21 +14,22 @@ RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd6
     && dpkg -i google-chrome-stable_current_amd64.deb || apt-get -f install -y \
     && rm google-chrome-stable_current_amd64.deb
 
-# Установка ChromeDriver (фиксированная версия для стабильности)
-RUN wget -q "https://chromedriver.storage.googleapis.com/121.0.0/chromedriver_linux64.zip" \
+# Установка ChromeDriver (берём версию Chrome)
+RUN CHROME_VERSION=$(google-chrome --version | grep -oP '\d+\.\d+\.\d+') \
+    && wget -q "https://chromedriver.storage.googleapis.com/${CHROME_VERSION}/chromedriver_linux64.zip" \
     && unzip chromedriver_linux64.zip \
     && mv chromedriver /usr/local/bin/ \
     && rm chromedriver_linux64.zip
 
 # Копируем requirements и код
-COPY requirements.txt ./
-COPY bot.py ./
+COPY requirements.txt .
+COPY bot.py .
 
-# Обновляем pip и устанавливаем зависимости
+# Устанавливаем зависимости Python
 RUN pip install --no-cache-dir --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Переменные окружения (можно передавать через docker run --env-file)
+# Переменные окружения
 ENV TELEGRAM_TOKEN=${TELEGRAM_TOKEN}
 ENV OPENAI_API_KEY=${OPENAI_API_KEY}
 
