@@ -13,9 +13,16 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 import time
 
-# ----------------- Ключи -----------------
-TELEGRAM_TOKEN = ("8578215347:AAEHEgRUsN1orxmBfI9wheTzCvIZTYrxDj8")
-OPENAI_API_KEY = ("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")
+
+from dotenv import load_dotenv
+import os
+
+# Загружаем переменные из .env
+load_dotenv()
+
+# ----------------- Ключи ----------------
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if not TELEGRAM_TOKEN or not OPENAI_API_KEY:
     raise Exception("❗️Отсутствуют TELEGRAM_TOKEN или OPENAI_API_KEY")
 
