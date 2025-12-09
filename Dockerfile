@@ -13,14 +13,14 @@ RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd6
     && rm google-chrome-stable_current_amd64.deb
 
 # ChromeDriver
-RUN CHROME_VERSION=$(google-chrome --version | grep -oP '\d+\.\d+\.\d+') \
+RUN CHROME_VERSION=$(google-chrome --version | awk '{print $3}') \
     && wget -q "https://chromedriver.storage.googleapis.com/${CHROME_VERSION}/chromedriver_linux64.zip" \
     && unzip chromedriver_linux64.zip \
     && mv chromedriver /usr/local/bin/ \
     && rm chromedriver_linux64.zip
 
 # Копируем зависимости и код
-COPY requirements.txt .
+COPY requirements.txt . 
 COPY bot.py .
 
 # Установка Python-зависимостей
