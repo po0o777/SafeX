@@ -1,20 +1,18 @@
-# Используем официальный Python образ
 FROM python:3.13-slim
 
-# Рабочая директория
 WORKDIR /app
 
-# Системные зависимости для Chrome/Selenium
+# Зависимости для Selenium и Chrome
 RUN apt-get update && apt-get install -y \
     wget unzip curl gnupg2 xvfb libnss3 libgconf-2-4 libxi6 libxss1 libglib2.0-0 libfontconfig1 libx11-6 \
     && rm -rf /var/lib/apt/lists/*
 
-# Устанавливаем Google Chrome
+# Google Chrome
 RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
     && dpkg -i google-chrome-stable_current_amd64.deb || apt-get -f install -y \
     && rm google-chrome-stable_current_amd64.deb
 
-# Устанавливаем ChromeDriver под версию Chrome
+# ChromeDriver
 RUN CHROME_VERSION=$(google-chrome --version | grep -oP '\d+\.\d+\.\d+') \
     && wget -q "https://chromedriver.storage.googleapis.com/${CHROME_VERSION}/chromedriver_linux64.zip" \
     && unzip chromedriver_linux64.zip \
@@ -22,10 +20,10 @@ RUN CHROME_VERSION=$(google-chrome --version | grep -oP '\d+\.\d+\.\d+') \
     && rm chromedriver_linux64.zip
 
 # Копируем зависимости и код
-COPY requirements.txt .
-COPY bot.py .
+COPY requirements.txt ./
+COPY bot.py ./
 
-# Обновляем pip и устанавливаем зависимости
+# Установка Python-зависимостей
 RUN pip install --no-cache-dir --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
