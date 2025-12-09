@@ -1,17 +1,17 @@
-import asyncio
+# Ver 2.22 aiogram
 import re
 import os
-from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import Command
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import StatesGroup, State
-from aiogram.fsm.storage.memory import MemoryStorage
+import time
+from aiogram import Bot, Dispatcher, types
+from aiogram.dispatcher import FSMContext
+from aiogram.dispatcher.filters import Command
+from aiogram.dispatcher.filters.state import StatesGroup, State
+from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from openai import OpenAI
 from openai.types.chat import ChatCompletionSystemMessageParam, ChatCompletionUserMessageParam
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
-import time
 from dotenv import load_dotenv
 
 # ----------------- Загружаем переменные -----------------
@@ -23,7 +23,7 @@ if not TELEGRAM_TOKEN or not OPENAI_API_KEY:
 
 bot = Bot(token=TELEGRAM_TOKEN)
 storage = MemoryStorage()
-dp = Dispatcher(storage=storage)
+dp = Dispatcher(bot, storage=storage)
 client = OpenAI(api_key=OPENAI_API_KEY)
 
 # ----------------- FSM -----------------
@@ -102,23 +102,23 @@ def parse_product_selenium(link: str):
         driver.quit()
 
 # ----------------- Команды и FSM -----------------
-@dp.message(Command("start"))
-async def start_cmd(message: types.Message, state: FSMContext):
+@dp.message_handler(commands=["start"])
+async def start_cmd(message: types.Message):
     keyboard = types.ReplyKeyboardMarkup(
         keyboard=[[types.KeyboardButton(text="Русский язык"), types.KeyboardButton(text="Қаз яз"), types.KeyboardButton(text="English")]],
         resize_keyboard=True, one_time_keyboard=True
     )
+    await Form.LANGUAGE.set()
     await message.answer("Выберите язык / Select language:", reply_markup=keyboard)
-    await state.set_state(Form.LANGUAGE)
 
-@dp.message(Form.LANGUAGE)
+@dp.message_handler(state=Form.LANGUAGE)
 async def language_choice(message: types.Message, state: FSMContext):
     await state.update_data(language=message.text)
     texts = LANG_TEXT.get(message.text, LANG_TEXT["Русский язык"])
+    await Form.LINK.set()
     await message.answer(texts["greeting"], reply_markup=types.ReplyKeyboardRemove())
-    await state.set_state(Form.LINK)
 
-@dp.message(Form.LINK)
+@dp.message_handler(state=Form.LINK)
 async def get_link(message: types.Message, state: FSMContext):
     link = message.text.strip()
     if not re.match(r"https?://", link):
@@ -130,39 +130,42 @@ async def get_link(message: types.Message, state: FSMContext):
         await state.update_data(**data)
         await analyze_product(message, state)
     else:
+        texts = LANG_TEXT.get((await state.get_data()).get("language"), LANG_TEXT["Русский язык"])
         await message.answer("⚠️ Не удалось получить данные автоматически. Заполни вручную.")
-        await state.set_state(Form.MANUAL_PRICE)
+        await Form.MANUAL_PRICE.set()
+        await message.answer(texts["manual_price"])
 
 # ----------------- Ручной ввод -----------------
-@dp.message(Form.MANUAL_PRICE)
+@dp.message_handler(state=Form.MANUAL_PRICE)
 async def manual_price_step(message: types.Message, state: FSMContext):
     await state.update_data(price=message.text)
     texts = LANG_TEXT.get((await state.get_data()).get("language"), LANG_TEXT["Русский язык"])
+    await Form.MANUAL_RATING_REVIEWS.set()
     await message.answer(texts["manual_rating"])
-    await state.set_state(Form.MANUAL_RATING_REVIEWS)
 
-@dp.message(Form.MANUAL_RATING_REVIEWS)
+@dp.message_handler(state=Form.MANUAL_RATING_REVIEWS)
 async def manual_rating_step(message: types.Message, state: FSMContext):
     await state.update_data(rating_reviews=message.text)
     texts = LANG_TEXT.get((await state.get_data()).get("language"), LANG_TEXT["Русский язык"])
+    await Form.MANUAL_DESCRIPTION.set()
     await message.answer(texts["manual_description"])
-    await state.set_state(Form.MANUAL_DESCRIPTION)
 
-@dp.message(Form.MANUAL_DESCRIPTION)
+@dp.message_handler(state=Form.MANUAL_DESCRIPTION)
 async def manual_description_step(message: types.Message, state: FSMContext):
     await state.update_data(description=message.text)
     texts = LANG_TEXT.get((await state.get_data()).get("language"), LANG_TEXT["Русский язык"])
+    await Form.MANUAL_SELLER.set()
     await message.answer(texts["manual_seller"])
-    await state.set_state(Form.MANUAL_SELLER)
 
-@dp.message(Form.MANUAL_SELLER)
+@dp.message_handler(state=Form.MANUAL_SELLER)
 async def manual_seller_step(message: types.Message, state: FSMContext):
     await state.update_data(seller=message.text)
     texts = LANG_TEXT.get((await state.get_data()).get("language"), LANG_TEXT["Русский язык"])
+    await Form.MANUAL_PHOTO.set()
     await message.answer(texts["manual_photo"])
-    await state.set_state(Form.MANUAL_PHOTO)
 
-@dp.message(Form.MANUAL_PHOTO)
+@dp.message_handler(content_types=types.ContentTypes.PHOTO, state=Form.MANUAL_PHOTO)
+@dp.message_handler(state=Form.MANUAL_PHOTO)
 async def manual_photo_step(message: types.Message, state: FSMContext):
     photo_file_id = message.photo[-1].file_id if message.photo else "Нет фото"
     await state.update_data(photo_file_id=photo_file_id)
@@ -250,12 +253,14 @@ Give short reasons and advice in {language}.
         one_time_keyboard=True
     )
     await message.answer("Что дальше?", reply_markup=keyboard)
-    await state.clear()
+    await state.finish()
 
-@dp.message(F.text == "🔁 Проверить другой товар")
-async def check_another(message: types.Message, state: FSMContext):
-    await start_cmd(message, state)
+@dp.message_handler(lambda message: message.text == "🔁 Проверить другой товар")
+async def check_another(message: types.Message):
+    await start_cmd(message)
 
 # ----------------- Запуск бота -----------------
+from aiogram.utils import executor
+
 if __name__ == "__main__":
-    asyncio.run(dp.start_polling(bot))
+    executor.start_polling(dp, skip_updates=True)
